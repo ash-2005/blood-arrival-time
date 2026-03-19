@@ -15,4 +15,13 @@ report/
 *.svg
 
 email_draft.md
-FINDINGS.md
+model_fit.py
+phase7.py
+probe_mat.py
+launch_jupyter.bat
+email_draft.md
+report.md
+jupyter_runtime/
+data/fmriprep/
+data/ds000228-fmriprep-datalad/
+rapidtide_fmriprep/
