@@ -10,9 +10,7 @@ bat-tvb-env/
 *report*.md
 report/
 .agent/
-*.npz
 *.log
-*.npy
 *debug.txt
 *.svg
 
