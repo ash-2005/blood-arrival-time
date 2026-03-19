@@ -47,6 +47,11 @@ STEPS = [
         "script": "characterise_bias.py",
         "check":  lambda: Path("figures/fig4_summary_card.png").exists(),
     },
+    {
+        "name":   "Step 7 — Model fit (empirical FC vs TVB-simulated FC)",
+        "script": "model_fit.py",
+        "check":  lambda: Path("data/model_fit_results.npz").exists(),
+    },
 ]
 
 BAR = "─" * 60
@@ -57,9 +62,9 @@ def fmt_size(path):
 
 
 def main():
-    print(f"\n{'═'*60}")
+    print(f"\n{'='*60}")
     print("  Blood Arrival Time × TVB — Full Pipeline")
-    print(f"{'═'*60}\n")
+    print(f"{'='*60}\n")
 
     total_start = time.time()
     step_times  = []
@@ -107,14 +112,25 @@ def main():
         Path("data/fc_bias_results.npz"),
         Path("data/parcellated_ts.npy"),
         Path("data/tvb_sim_results.npz"),
+        Path("data/model_fit_results.npz"),
         Path("figures/fig1_delay_profile.png"),
         Path("figures/fig2_fc_bias_story.png"),
         Path("figures/fig3_network_bias_matrix.png"),
         Path("figures/fig4_summary_card.png"),
+        Path("figures/fig5_model_fit.png"),
     ]
     for p in outputs:
         mark = "✓" if p.exists() else "✗"
         print(f"  {mark} {p}  ({fmt_size(p)})")
+
+    mf_path = Path("data/model_fit_results.npz")
+    if mf_path.exists():
+        import numpy as np
+        mf = np.load(str(mf_path))
+        best_r = float(mf["best_r"]) if "best_r" in mf else float("nan")
+        if not np.isnan(best_r):
+            best_label = mf["best_sim"].item().decode() if hasattr(mf["best_sim"].item(), "decode") else str(mf["best_sim"].item())
+            print(f"\n  Best model fit: r = {best_r:.4f} ({best_label})")
 
     print(f"\n{'═'*60}")
 

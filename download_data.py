@@ -1,12 +1,14 @@
 """
 download_data.py
 ----------------
-Downloads the preprocessed fMRI data for sub-pixar001 from OpenNeuro ds000228
-directly over HTTPS (no datalad, no git-annex).
+Downloads the fMRI data for sub-pixar001 from OpenNeuro ds000228.
 
-NOTE: The ds000228 S3 derivatives use SPM-style preprocessing (swrf pipeline),
-not fMRIPrep BIDS-derivatives. The BOLD file is the smoothed+warped+realigned
-4D MNI-space volume. This is valid for rapidtide blood arrival time estimation.
+Downloads two sets of files:
+1. Preprocessed SPM derivatives (MNI-space, nuisance-regressed BOLD)
+2. Raw BOLD and T1w from the BIDS root (native space, motion-corrected only)
+
+The raw BOLD is needed to run rapidtide on minimally-processed data, as
+recommended: rapidtide estimates are distorted by global signal regression.
 
 Run from the GSOC/ working directory:
     python download_data.py
@@ -16,21 +18,38 @@ import time
 import requests
 from pathlib import Path
 
-BASE_S3 = "https://s3.amazonaws.com/openneuro.org/ds000228/derivatives/fmriprep/sub-pixar001/"
+BASE_DERIV = "https://s3.amazonaws.com/openneuro.org/ds000228/derivatives/fmriprep/sub-pixar001/"
+BASE_RAW   = "https://s3.amazonaws.com/openneuro.org/ds000228/sub-pixar001/"
 
-# Actual files confirmed to exist via S3 bucket listing
-FILES = [
+# Files confirmed to exist in the S3 bucket
+FILES_DERIV = [
     (
+        BASE_DERIV,
         "sub-pixar001_task-pixar_run-001_swrf_bold.nii.gz",
         "sub-pixar001_task-pixar_run-001_swrf_bold.nii.gz",
     ),
     (
+        BASE_DERIV,
         "sub-pixar001_analysis_mask.nii.gz",
         "sub-pixar001_analysis_mask.nii.gz",
     ),
     (
+        BASE_DERIV,
         "sub-pixar001_task-pixar_run-001_ART_and_CompCor_nuisance_regressors.mat",
         "sub-pixar001_task-pixar_run-001_nuisance_regressors.mat",
+    ),
+]
+
+FILES_RAW = [
+    (
+        BASE_RAW,
+        "func/sub-pixar001_task-pixar_run-001_bold.nii.gz",
+        "sub-pixar001_task-pixar_run-001_bold.nii.gz",
+    ),
+    (
+        BASE_RAW,
+        "anat/sub-pixar001_T1w.nii.gz",
+        "sub-pixar001_T1w.nii.gz",
     ),
 ]
 
@@ -111,17 +130,29 @@ def download_file(url: str, dest: Path) -> None:
 
 
 def main() -> None:
-    print(f"Downloading {len(FILES)} files to {OUT_DIR}/\n")
-    for s3_name, local_name in FILES:
-        url  = BASE_S3 + s3_name
-        dest = OUT_DIR / local_name
-        download_file(url, dest)
+    all_groups = [
+        ("Preprocessed derivatives", FILES_DERIV),
+        ("Raw BOLD + anatomical",    FILES_RAW),
+    ]
+    total = sum(len(files) for _, files in all_groups)
+    print(f"Downloading {total} files to {OUT_DIR}/\n")
+
+    for group_name, files in all_groups:
+        print(f"\n── {group_name} ──")
+        for base_url, s3_name, local_name in files:
+            url  = base_url + s3_name
+            dest = OUT_DIR / local_name
+            download_file(url, dest)
 
     print("\nAll files downloaded.")
     print("\nSummary:")
-    for _s3_name, local_name in FILES:
-        p = OUT_DIR / local_name
-        print(f"  {p.name}: {p.stat().st_size / 1_048_576:.1f} MB")
+    for _, files in all_groups:
+        for _base, _s3, local_name in files:
+            p = OUT_DIR / local_name
+            if p.exists():
+                print(f"  {p.name}: {p.stat().st_size / 1_048_576:.1f} MB")
+            else:
+                print(f"  {p.name}: MISSING")
 
 
 if __name__ == "__main__":

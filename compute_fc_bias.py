@@ -47,6 +47,10 @@ FIG_MAT      = FIG_DIR / "phase2_fc_matrices.png"
 FIG_SCAT     = FIG_DIR / "phase2_bias_scatter.png"
 REPORT_PATH  = Path("report.md")
 
+CLEANED_BOLD_PATH = Path(
+    "data/rapidtide_output/sub-pixar001_desc-lfofilterCleaned_bold.nii.gz"
+)
+
 TR = 2.0
 
 
@@ -179,6 +183,56 @@ def zscore(ts):
     std  = ts.std(axis=0, keepdims=True)
     std  = np.where(std == 0, 1.0, std)   # avoid divide-by-zero for empty parcels
     return (ts - mean) / std
+
+
+def compute_slfo_cleaned_fc(bold_img, mask, bold_shape, atlas_data):
+    """
+    Load the rapidtide sLFO-cleaned BOLD, apply same parcellation+bandpass+zscore
+    pipeline as the main FC computation, and return the cleaned FC matrix.
+
+    rapidtide removes the sLFO (systemic low frequency oscillation) component
+    from the BOLD signal. The mentor notes sLFOs inflate FC, so cleaned FC
+    should be lower on average.
+    """
+    if not CLEANED_BOLD_PATH.exists():
+        print(f"  [SKIP] Cleaned BOLD not found: {CLEANED_BOLD_PATH}")
+        print("  Run run_rapidtide.py first (the cleaned file is a rapidtide output).")
+        return None
+
+    print(f"\nLoading sLFO-cleaned BOLD: {CLEANED_BOLD_PATH}")
+    cleaned_img  = nib.load(str(CLEANED_BOLD_PATH))
+    cleaned_data = cleaned_img.get_fdata(dtype=np.float32)
+    print(f"  Shape: {cleaned_data.shape}")
+
+    # Resample mask to cleaned BOLD space if shapes differ
+    mask_img_clean = image.resample_to_img(
+        nib.load(str(MASK_PATH)), cleaned_img, interpolation="nearest"
+    )
+    mask_clean = np.asarray(mask_img_clean.dataobj, dtype=bool)
+
+    # Make sure T matches; rapidtide sometimes trims edge timepoints
+    T_clean = cleaned_data.shape[3]
+    T_orig  = bold_img.shape[3]
+    if T_clean != T_orig:
+        print(f"  NOTE: cleaned BOLD has T={T_clean}, original T={T_orig} — trimming to min.")
+
+    ts_clean_vox = cleaned_data[mask_clean].astype(np.float32)
+    ts_filt_clean = bandpass_filter(ts_clean_vox)
+    del ts_clean_vox
+
+    # Resample atlas to cleaned BOLD space
+    atlas_s = datasets.fetch_atlas_schaefer_2018(n_rois=100, yeo_networks=7, resolution_mm=2)
+    atl_img = nib.load(atlas_s["maps"])
+    atl_res = image.resample_to_img(atl_img, cleaned_img, interpolation="nearest")
+    atlas_data_clean = np.asarray(atl_res.dataobj, dtype=np.int32)
+
+    ts_parc_clean, _ = parcellate(ts_filt_clean, mask_clean, cleaned_img.shape, atlas_data_clean)
+    del ts_filt_clean
+    ts_z_clean = zscore(ts_parc_clean)
+    fc_slfo_cleaned = compute_fc(ts_z_clean)
+    print(f"  sLFO-cleaned FC shape: {fc_slfo_cleaned.shape}")
+    return fc_slfo_cleaned
+
 
 
 def apply_delay_correction(ts, delays, tr=TR):
@@ -495,6 +549,24 @@ def main():
     fc_corrected = compute_fc(ts_corr)
 
     res = bias_analysis(fc_legacy, fc_corrected, delays)
+
+    fc_slfo_cleaned = compute_slfo_cleaned_fc(bold_img, mask, bold_shape, atlas_data)
+
+    if fc_slfo_cleaned is not None:
+        mean_fc_leg     = float(np.abs(fc_legacy[np.triu_indices(100, k=1)]).mean())
+        mean_fc_cor     = float(np.abs(fc_corrected[np.triu_indices(100, k=1)]).mean())
+        mean_fc_slfo    = float(np.abs(fc_slfo_cleaned[np.triu_indices(100, k=1)]).mean())
+        print(f"\n── Mean |FC| comparison ─────────────────────────────────")
+        print(f"  Legacy FC             : {mean_fc_leg:.6f}")
+        print(f"  Delay-corrected FC    : {mean_fc_cor:.6f}")
+        print(f"  sLFO-cleaned FC       : {mean_fc_slfo:.6f}")
+        if mean_fc_slfo < mean_fc_leg:
+            print("  ✓ Mentor prediction confirmed: sLFO removal reduces mean |FC|")
+        else:
+            print("  ⚠ Mentor prediction NOT confirmed: sLFO FC is not lower than legacy FC")
+        res["fc_slfo_cleaned"] = fc_slfo_cleaned
+    else:
+        res["fc_slfo_cleaned"] = np.zeros((100, 100), dtype=np.float32)
 
     print("""
 NOTE on negative empirical Spearman rho:
