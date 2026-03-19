@@ -36,7 +36,6 @@ from nilearn import datasets, image
 from scipy import signal, stats
 from scipy.ndimage import affine_transform
 
-# ── paths ──────────────────────────────────────────────────────────────────────
 BOLD_PATH    = Path("data/ds000228/sub-pixar001_task-pixar_run-001_swrf_bold.nii.gz")
 MASK_PATH    = Path("data/ds000228/sub-pixar001_analysis_mask.nii.gz")
 MAT_PATH     = Path("data/ds000228/sub-pixar001_task-pixar_run-001_nuisance_regressors.mat")
@@ -51,9 +50,6 @@ REPORT_PATH  = Path("report.md")
 TR = 2.0
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# 1.  BOLD loading
-# ══════════════════════════════════════════════════════════════════════════════
 def load_bold_masked():
     print(f"Loading BOLD: {BOLD_PATH}")
     bold_img = nib.load(str(BOLD_PATH))
@@ -75,9 +71,6 @@ def load_bold_masked():
     return ts, mask, bold_img, T
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# 2.  Nuisance regression
-# ══════════════════════════════════════════════════════════════════════════════
 def load_regressors():
     print(f"\nLoading nuisance regressors (HDF5): {MAT_PATH}")
     with h5py.File(str(MAT_PATH), "r") as f:
@@ -101,20 +94,16 @@ def regress_nuisance(ts, R):
     T = ts.shape[1]
     assert R.shape[0] == T, f"Regressor rows {R.shape[0]} != timepoints {T}"
 
-    # Add intercept
     ones = np.ones((T, 1), dtype=np.float64)
-    X = np.hstack([ones, R])                   # (T, k+1)
+    X = np.hstack([ones, R])
     # solve X @ beta = ts.T  →  beta: (k+1, n_vox)
     beta, _, _, _ = np.linalg.lstsq(X, ts.T.astype(np.float64), rcond=None)
-    fitted = (X @ beta).T.astype(np.float32)   # (n_vox, T)
+    fitted = (X @ beta).T.astype(np.float32)
     ts_clean = ts - fitted
     print(f"  Done. Residual shape: {ts_clean.shape}")
     return ts_clean
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# 3.  Bandpass filter 0.01-0.1 Hz
-# ══════════════════════════════════════════════════════════════════════════════
 def bandpass_filter(ts, tr=TR, lo=0.01, hi=0.1, order=4):
     """Butterworth bandpass on (n_vox, T) array, applied per voxel."""
     print(f"\nBandpass filtering {lo}-{hi} Hz ...")
@@ -138,19 +127,15 @@ def bandpass_filter(ts, tr=TR, lo=0.01, hi=0.1, order=4):
     return out
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# 4.  Parcellation
-# ══════════════════════════════════════════════════════════════════════════════
 def fetch_atlas_resampled(bold_img):
     print("\nFetching Schaefer 2018 atlas ...")
     atlas  = datasets.fetch_atlas_schaefer_2018(n_rois=100, yeo_networks=7, resolution_mm=2)
     atl_img = nib.load(atlas["maps"])
     all_labels = [lbl.decode() if isinstance(lbl, bytes) else lbl
                   for lbl in atlas["labels"]]
-    labels = all_labels[1:]   # drop 'Background'
+    labels = all_labels[1:]
     print(f"  Atlas: {len(labels)} brain parcels")
 
-    # Resample atlas to bold space
     atl_res = image.resample_to_img(atl_img, bold_img, interpolation="nearest")
     atlas_data = np.asarray(atl_res.dataobj, dtype=np.int32)
     return atlas_data, labels
@@ -163,7 +148,6 @@ def parcellate(ts_vox, mask, bold_shape, atlas_data):
     """
     print("\nParcellating to 100 Schaefer regions ...")
     X, Y, Z, T = (*bold_shape[:3], ts_vox.shape[1])
-    # Reconstruct 4D volume for indexing
     vol = np.zeros((X, Y, Z, T), dtype=np.float32)
     vol[mask] = ts_vox
 
@@ -197,9 +181,6 @@ def zscore(ts):
     return (ts - mean) / std
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# 5.  Delay correction
-# ══════════════════════════════════════════════════════════════════════════════
 def apply_delay_correction(ts, delays, tr=TR):
     """
     ts:     (T, N) parcellated z-scored time series
@@ -215,11 +196,11 @@ def apply_delay_correction(ts, delays, tr=TR):
             continue
         if shift > 0:
             out[shift:, i]  = ts[:T - shift, i]
-            out[:shift, i]  = ts[0, i]      # pad start with first value
-        else:  # shift < 0
+            out[:shift, i]  = ts[0, i]
+        else:
             s = -shift
             out[:T - s, i] = ts[s:, i]
-            out[T - s:, i] = ts[-1, i]      # pad end with last value
+            out[T - s:, i] = ts[-1, i]
         shifts_applied[i] = shift
 
     unique_shifts = sorted(set(shifts_applied.values()))
@@ -228,9 +209,6 @@ def apply_delay_correction(ts, delays, tr=TR):
     return out
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# 6.  FC computation + bias analysis
-# ══════════════════════════════════════════════════════════════════════════════
 def compute_fc(ts):
     """ts: (T, N) → FC: (N, N)"""
     fc = np.corrcoef(ts.T)
@@ -280,9 +258,6 @@ def bias_analysis(fc_leg, fc_cor, delays):
     )
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# 7.  Figures
-# ══════════════════════════════════════════════════════════════════════════════
 DARK_BG   = "#0f1117"
 PANEL_BG  = "#161b22"
 TEXT_COL  = "#e6edf3"
@@ -347,7 +322,6 @@ def figure_bias_scatter(res):
     x1 = res["pair_delay_diff"]
     y1 = res["pair_delta_fc"]
     ax1.scatter(x1, y1, alpha=0.3, s=5, color="#2ea8a8", rasterized=True)
-    # Linear fit
     m, b = np.polyfit(x1, y1, 1)
     xs = np.linspace(x1.min(), x1.max(), 200)
     ax1.plot(xs, m * xs + b, color="#f85149", linewidth=1.5, label=f"fit y={m:.4f}x+{b:.4f}")
@@ -389,9 +363,6 @@ def figure_bias_scatter(res):
     print(f"Saved: {FIG_SCAT}  ({FIG_SCAT.stat().st_size/1024:.0f} KB)")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# 8.  Report
-# ══════════════════════════════════════════════════════════════════════════════
 def write_report(res, delays, labels, n_vox, reg_shape, ts_parc_shape,
                  empty_parcels, runtime_min):
     rho = float(res["spearman_rho"])
@@ -482,58 +453,47 @@ def write_report(res, delays, labels, n_vox, reg_shape, ts_parc_shape,
     print(f"\nReport written: {REPORT_PATH} ({REPORT_PATH.stat().st_size} bytes)")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# main
-# ══════════════════════════════════════════════════════════════════════════════
 def main():
     t0 = time.time()
     FIG_DIR.mkdir(parents=True, exist_ok=True)
 
-    # 1. Load
+    # ── main execution ──
+
     ts_vox, mask, bold_img, T = load_bold_masked()
     bold_shape = bold_img.shape
     n_vox = int(mask.sum())
 
-    # 2. Nuisance regression
     R = load_regressors()
     reg_shape = R.shape
     ts_clean = regress_nuisance(ts_vox, R)
-    del ts_vox   # free memory
+    del ts_vox
 
-    # 3. Bandpass filter
     ts_filt = bandpass_filter(ts_clean)
     del ts_clean
 
-    # 4. Parcellate
     atlas_data, labels = fetch_atlas_resampled(bold_img)
     ts_parc, empty_parcels = parcellate(ts_filt, mask, bold_shape, atlas_data)
     del ts_filt
 
-    # 5. Z-score
     ts_z = zscore(ts_parc)
     ts_parc_shape = ts_z.shape
     print(f"\nZ-scored TS shape: {ts_z.shape}")
 
-    # 5b. Save parcellated time series for SC surrogate in Phase 3
     np.save("data/parcellated_ts.npy", ts_z)
     print("  Saved: data/parcellated_ts.npy — used as FC-based SC surrogate in simulate_tvb.py")
 
-    # 6. Load delays
     delays = np.load(str(DELAYS_PATH))
     labels_arr = np.load(str(LABELS_PATH))
     print(f"Delays loaded: shape={delays.shape}  range=[{delays.min():.4f}, {delays.max():.4f}] s")
 
-    # 7. Legacy FC
     print("\nComputing Legacy FC ...")
     fc_legacy = compute_fc(ts_z)
 
-    # 8. Delay correction + Corrected FC
     print("Applying delay correction ...")
     ts_corr = apply_delay_correction(ts_z, delays, tr=TR)
     print("Computing Corrected FC ...")
     fc_corrected = compute_fc(ts_corr)
 
-    # 9. Bias analysis
     res = bias_analysis(fc_legacy, fc_corrected, delays)
 
     print("""
@@ -548,15 +508,12 @@ NOTE on negative empirical Spearman rho:
   discretisation artefact. The simulation at 1ms resolution shows the
   true positive relationship.""")
 
-    # 10. Save NPZ
     np.savez(str(NPZ_OUT), **res)
     print(f"\nSaved: {NPZ_OUT}  ({NPZ_OUT.stat().st_size/1024:.0f} KB)")
 
-    # 11. Figures
     figure_fc_matrices(res)
     figure_bias_scatter(res)
 
-    # 12. Report
     runtime_min = (time.time() - t0) / 60
     write_report(res, delays, labels_arr.tolist(), n_vox, reg_shape,
                  ts_parc_shape, empty_parcels, runtime_min)

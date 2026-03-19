@@ -17,7 +17,6 @@ import sys
 import time
 from pathlib import Path
 
-# ── paths ──────────────────────────────────────────────────────────────────────
 DATA_DIR  = Path("data") / "ds000228"
 OUT_DIR   = Path("data") / "rapidtide_output"
 BOLD_FILE = DATA_DIR / "sub-pixar001_task-pixar_run-001_swrf_bold.nii.gz"
@@ -51,11 +50,10 @@ def run_rapidtide() -> None:
     """
     Call rapidtide.exe directly from the venv Scripts directory.
     """
-    # Locate rapidtide.exe inside the same venv as our Python
     scripts_dir = Path(sys.executable).parent
     exe = scripts_dir / "rapidtide.exe"
     if not exe.exists():
-        exe = scripts_dir / "rapidtide"   # Linux/mac fallback
+        exe = scripts_dir / "rapidtide"
     if not exe.exists():
         raise FileNotFoundError(f"rapidtide executable not found in {scripts_dir}")
 
@@ -69,7 +67,7 @@ def run_rapidtide() -> None:
         "--passes",      "3",
         "--nprocs",      "1",           # Windows multiprocessing spawn fails with >1
         "--brainmask",   str(MASK_FILE),
-        "--globalmeaninclude", str(MASK_FILE),  # use brainmask for global signal
+        "--globalmeaninclude", str(MASK_FILE),
         "--noprogressbar",
     ]
 
@@ -85,7 +83,6 @@ def run_rapidtide() -> None:
     elapsed = (time.time() - t0) / 60
 
     out = proc.stdout or ""
-    # Print last 5000 chars (rapidtide output can be very long)
     suffix = out[-5000:] if len(out) > 5000 else out
     print(suffix)
 
@@ -112,7 +109,6 @@ def main() -> None:
         print(f"\nLag map : {lag}")
         print(f"Size    : {size_mb:.1f} MB")
     else:
-        # list all outputs for debugging
         files = sorted(OUT_DIR.iterdir()) if OUT_DIR.exists() else []
         raise FileNotFoundError(
             "Lag map (*desc-maxtime_map.nii.gz) not found in output directory.\n"

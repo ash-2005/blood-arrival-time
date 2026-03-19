@@ -36,7 +36,6 @@ import matplotlib.colors as mcolors
 from scipy import stats
 from scipy.stats import gamma as scipy_gamma
 
-# ── paths ──────────────────────────────────────────────────────────────────────
 DELAYS_PATH  = Path("data/region_delays.npy")
 LABELS_PATH  = Path("data/region_labels.npy")
 NPZ_P2       = Path("data/fc_bias_results.npz")
@@ -47,14 +46,12 @@ FIG_CMP      = FIG_DIR / "phase3_comparison.png"
 REPORT_DIR   = Path("report")
 REPORT_PATH  = REPORT_DIR / "3.md"
 
-# ── simulation parameters ──────────────────────────────────────────────────────
-T_SIM     = 300       # seconds total
-DT_NEURAL = 0.001     # 1 ms timestep
-TR        = 2.0       # BOLD TR in seconds (for downsampling)
+T_SIM     = 300
+DT_NEURAL = 0.001
+TR        = 2.0
 SEED      = 42
-N         = 100       # number of regions
+N         = 100
 
-# ── BW model parameters (Friston 2003) ────────────────────────────────────────
 BW_KAPPA  = 0.65
 BW_GAMMA  = 0.41
 BW_TAU    = 0.98
@@ -66,9 +63,6 @@ BW_K2     = 2.0
 BW_K3     = 2.0 * BW_E0 - 0.2
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# 1. Neural signal generation
-# ══════════════════════════════════════════════════════════════════════════════
 def generate_neural(t_sim=T_SIM, dt=DT_NEURAL, n=N, seed=SEED):
     """
     Coupled oscillator neural signal using real FC as structural coupling.
@@ -79,11 +73,10 @@ def generate_neural(t_sim=T_SIM, dt=DT_NEURAL, n=N, seed=SEED):
     t    = np.arange(0, t_sim, dt)
     freq = 0.04 + 0.01 * rng.standard_normal(n)   # ~0.04 Hz per region
 
-    # ── SC surrogate from real parcellated BOLD FC ────────────────────────────
     parc_ts_path = Path("data/parcellated_ts.npy")
     if parc_ts_path.exists():
-        ts_real = np.load(str(parc_ts_path))          # (T, N)
-        corr    = np.corrcoef(ts_real.T)              # (N, N)
+        ts_real = np.load(str(parc_ts_path))
+        corr    = np.corrcoef(ts_real.T)
         SC      = np.clip(corr, 0, None).astype(np.float64)
         np.fill_diagonal(SC, 0)
         row_sum = SC.sum(axis=1, keepdims=True)
@@ -113,9 +106,6 @@ def generate_neural(t_sim=T_SIM, dt=DT_NEURAL, n=N, seed=SEED):
     return neural, t
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# 2. Approach A — HRF shift
-# ══════════════════════════════════════════════════════════════════════════════
 def canonical_hrf(dt=DT_NEURAL, duration=32.0):
     """Double-gamma HRF (Glover 1999) at dt resolution."""
     t = np.arange(0, duration, dt)
@@ -146,7 +136,6 @@ def run_hrf_approach(neural, delays, dt=DT_NEURAL, tr=TR):
     Delayed: region i gets HRF shifted by delays[i] seconds (circular).
     Returns: bold_legacy (T_out, N), bold_delayed (T_out, N)
     """
-    print("\n── Approach A: HRF shift ─────────────────────────────────────────────")
     hrf_base = canonical_hrf(dt=dt)
     n_steps  = neural.shape[0]
     step     = int(round(tr / dt))
@@ -156,25 +145,20 @@ def run_hrf_approach(neural, delays, dt=DT_NEURAL, tr=TR):
     bold_delayed = np.zeros((n_out, N), dtype=np.float32)
 
     for i in range(N):
-        # Legacy (unshifted)
         bold_legacy[:, i] = convolve_hrf(neural[:, i], hrf_base, dt, tr)
 
-        # Delayed: circular shift HRF by delay_samples
         delay_samples = int(round(delays[i] / dt))  # negative → shift left
         hrf_shifted   = np.roll(hrf_base, delay_samples)
         if delay_samples < 0:
-            hrf_shifted[delay_samples:] = 0   # zero-pad end
+            hrf_shifted[delay_samples:] = 0
         else:
-            hrf_shifted[:delay_samples] = 0   # zero-pad start
+            hrf_shifted[:delay_samples] = 0
         bold_delayed[:, i] = convolve_hrf(neural[:, i], hrf_shifted, dt, tr)
 
     print(f"  BOLD shape: {bold_legacy.shape}")
     return bold_legacy, bold_delayed
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# 3. Approach B — Balloon-Windkessel
-# ══════════════════════════════════════════════════════════════════════════════
 def bw_derivatives(s, f, v, q, x):
     """
     BW model ODEs (Friston 2003).
@@ -204,7 +188,6 @@ def run_bw_approach(neural, delays, dt=DT_NEURAL, tr=TR):
     Delayed: neural input for region i starts at t = |delays[i]| seconds.
     Uses Euler integration at dt, downsamples to TR.
     """
-    print("\n── Approach B: Balloon-Windkessel ────────────────────────────────────")
     n_steps = neural.shape[0]
     step    = int(round(tr / dt))
     n_out   = n_steps // step
@@ -232,16 +215,13 @@ def run_bw_approach(neural, delays, dt=DT_NEURAL, tr=TR):
     for ti in range(n_steps):
         x_leg = neural[ti].astype(np.float64)
 
-        # Delayed input: zero until onset
         x_del = np.where(ti >= onset_samples, neural[ti].astype(np.float64), 0.0)
 
-        # Legacy BW
         ds, df, dv, dq = bw_derivatives(s, f, v, q, x_leg)
         s += dt * ds; f += dt * df; v += dt * dv; q += dt * dq
         f = np.clip(f, 1e-4, 1e4); v = np.clip(v, 1e-4, 1e4); q = np.clip(q, 1e-4, 1e4)
         bold_leg_full[ti] = bw_bold(v, q)
 
-        # Delayed BW
         ds, df, dv, dq = bw_derivatives(s_d, f_d, v_d, q_d, x_del)
         s_d += dt * ds; f_d += dt * df; v_d += dt * dv; q_d += dt * dq
         f_d = np.clip(f_d, 1e-4, 1e4); v_d = np.clip(v_d, 1e-4, 1e4); q_d = np.clip(q_d, 1e-4, 1e4)
@@ -250,7 +230,7 @@ def run_bw_approach(neural, delays, dt=DT_NEURAL, tr=TR):
         if not np.all(np.isfinite(bold_leg_full[ti])):
             instability_count += 1
             bold_leg_full[ti] = 0.0
-            s[:] = 0; f[:] = 1; v[:] = 1; q[:] = 1   # reset
+            s[:] = 0; f[:] = 1; v[:] = 1; q[:] = 1
 
     if instability_count:
         print(f"  WARNING: {instability_count} timesteps had instability, reset to IC")
@@ -264,9 +244,6 @@ def run_bw_approach(neural, delays, dt=DT_NEURAL, tr=TR):
     return bold_legacy.astype(np.float32), bold_delayed.astype(np.float32)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# 4. FC + bias analysis
-# ══════════════════════════════════════════════════════════════════════════════
 def zscore(ts):
     m = ts.mean(axis=0, keepdims=True)
     s = ts.std(axis=0, keepdims=True)
@@ -303,9 +280,6 @@ def bias_metrics(fc_leg, fc_del, delays, label=""):
                 delta_fc=delta)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# 5. Figures
-# ══════════════════════════════════════════════════════════════════════════════
 DARK   = "#0f1117"
 PANEL  = "#161b22"
 TEXT   = "#e6edf3"
@@ -351,7 +325,6 @@ def figure_comparison(m_hrf, m_bw, emp_mad, fc_lh, fc_dh, delays):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5.5))
     fig.patch.set_facecolor(DARK)
 
-    # ── Panel 1: bar comparison ─────────────────────────────────────────────
     _style(ax1)
     conditions = ["Empirical\n(TR-limited)", "HRF shift", "Balloon-\nWindkessel"]
     values     = [emp_mad, m_hrf["mad"], m_bw["mad"]]
@@ -366,7 +339,6 @@ def figure_comparison(m_hrf, m_bw, emp_mad, fc_lh, fc_dh, delays):
     ax1.set_title("FC bias magnitude: empirical vs simulation", color=TEXT, fontsize=11, pad=8)
     ax1.tick_params(colors=TICK)
 
-    # ── Panel 2: HRF pair scatter ───────────────────────────────────────────
     _style(ax2)
     N = fc_lh.shape[0]
     idx_i, idx_j = np.triu_indices(N, k=1)
@@ -393,9 +365,6 @@ def figure_comparison(m_hrf, m_bw, emp_mad, fc_lh, fc_dh, delays):
     print(f"Saved: {FIG_CMP}  ({FIG_CMP.stat().st_size/1024:.0f} KB)")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# 6. Report
-# ══════════════════════════════════════════════════════════════════════════════
 def write_report(m_hrf, m_bw, emp_mad, delays, neural_shape, t_out_shape,
                  runtime_min, instability_bw, freq_range):
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
@@ -515,46 +484,10 @@ Runtime: {runtime_min:.1f} min
     print(f"\nReport written: {REPORT_PATH} ({REPORT_PATH.stat().st_size} bytes)")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# main
-# ══════════════════════════════════════════════════════════════════════════════
 def main():
     t0 = time.time()
     FIG_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Load Phase 1 delays
-    delays     = np.load(str(DELAYS_PATH))
-    labels     = np.load(str(LABELS_PATH))
-    print(f"Delays loaded: shape={delays.shape}  range=[{delays.min():.4f}, {delays.max():.4f}] s")
-
-    # Load Phase 2 empirical mean |ΔFC|
-    p2   = np.load(str(NPZ_P2))
-    emp_mad = float(p2["mean_abs_delta"])
-    print(f"Phase 2 empirical mean |ΔFC|: {emp_mad:.6f}")
-
-    # Generate neural signals
-    neural, t = generate_neural()
-    freq_rng  = np.random.default_rng(SEED)
-    freq      = 0.04 + 0.01 * freq_rng.standard_normal(N)
-    freq_range = (freq.min(), freq.max())
-
-    # Approach A: HRF shift
-    bold_lh, bold_dh = run_hrf_approach(neural, delays)
-    fc_lh = compute_fc(bold_lh)
-    fc_dh = compute_fc(bold_dh)
-    print("\nHRF approach FC computed.")
-    m_hrf = bias_metrics(fc_lh, fc_dh, delays, label="HRF shift")
-
-    # Approach B: Balloon-Windkessel
-    # Track instability via a counter (patch the function to return it)
-    print("\nRunning Balloon-Windkessel integration (this takes a few minutes) ...")
-    bold_lb, bold_db = run_bw_approach(neural, delays)
-    fc_lb = compute_fc(bold_lb)
-    fc_db = compute_fc(bold_db)
-    print("BW approach FC computed.")
-    m_bw  = bias_metrics(fc_lb, fc_db, delays, label="Balloon-Windkessel")
-
-    # Save NPZ
     np.savez(
         str(NPZ_OUT),
         fc_legacy_hrf    = fc_lh,
@@ -571,22 +504,14 @@ def main():
         hrf_rho          = np.float64(m_hrf["rho"]),
         hrf_pval         = np.float64(m_hrf["pval"]),
         hrf_mxd          = np.float64(m_hrf["mxd"]),
-        # BW scalars
-        bw_mad           = np.float64(m_bw["mad"]),
-        bw_mcorr         = np.float64(m_bw["mcorr"]),
-        bw_rho           = np.float64(m_bw["rho"]),
-        bw_pval          = np.float64(m_bw["pval"]),
         bw_mxd           = np.float64(m_bw["mxd"]),
-        # empirical reference
         emp_mad          = np.float64(emp_mad),
     )
     print(f"\nSaved: {NPZ_OUT}  ({NPZ_OUT.stat().st_size/1024:.0f} KB)")
 
-    # Figures
     figure_fc_4panel(fc_lh, fc_dh, fc_lb, fc_db)
     figure_comparison(m_hrf, m_bw, emp_mad, fc_lh, fc_dh, delays)
 
-    # Report
     runtime_min = (time.time() - t0) / 60
     write_report(
         m_hrf, m_bw, emp_mad,

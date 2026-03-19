@@ -89,7 +89,6 @@ def main():
         step_times.append((step["name"], elapsed))
         print(f"  ✓ Done in {elapsed/60:.1f} min")
 
-    # ── Final summary ─────────────────────────────────────────────────────────
     total = time.time() - total_start
     print(f"\n{BAR}")
     print(f"Pipeline complete in {total/60:.1f} min total\n")

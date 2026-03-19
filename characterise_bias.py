@@ -25,7 +25,6 @@ import numpy as np
 from pathlib import Path
 from scipy import stats
 
-# ── paths ──────────────────────────────────────────────────────────────────────
 DELAYS_PATH = Path("data/region_delays.npy")
 LABELS_PATH = Path("data/region_labels.npy")
 NPZ_P2      = Path("data/fc_bias_results.npz")
@@ -34,7 +33,6 @@ FIG_DIR     = Path("figures")
 REPORT_DIR  = Path("report")
 REPORT_PATH = REPORT_DIR / "4.md"
 
-# ── network colour palette ─────────────────────────────────────────────────────
 NET_COLORS = {
     "Vis":         "#4C72B0",
     "SomMot":      "#DD8452",
@@ -47,9 +45,6 @@ NET_COLORS = {
 NET_ORDER = ["Vis", "SomMot", "DorsAttn", "SalVentAttn", "Limbic", "Cont", "Default"]
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Label parsing
-# ══════════════════════════════════════════════════════════════════════════════
 def parse_network(label):
     """'7Networks_LH_Default_PFC_1' → 'Default'"""
     try:
@@ -68,9 +63,6 @@ def parse_hemi(label):
         return "?"
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Load data
-# ══════════════════════════════════════════════════════════════════════════════
 def load_all():
     print("Loading all Phase 1–3 data ...")
     delays  = np.load(str(DELAYS_PATH))
@@ -99,14 +91,12 @@ def load_all():
     p3_mad      = float(p3["hrf_mad"])
     p3_bw_mad   = float(p3["bw_mad"])
 
-    # Parse networks
     networks = [parse_network(l) for l in labels]
     hemis    = [parse_hemi(l) for l in labels]
     unknown  = [l for l, n in zip(labels, networks) if n == "Unknown"]
     if unknown:
         print(f"  WARNING: could not parse network for {len(unknown)} labels: {unknown[:5]}")
 
-    # Per-network counts
     from collections import Counter
     net_counts = Counter(networks)
     print("  Regions per network:", dict(net_counts))
@@ -125,9 +115,6 @@ def load_all():
     )
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Figure 1 — Delay profile
-# ══════════════════════════════════════════════════════════════════════════════
 def fig1_delay_profile(d):
     FIG_DIR.mkdir(parents=True, exist_ok=True)
     delays   = d["delays"]
@@ -147,7 +134,6 @@ def fig1_delay_profile(d):
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
 
-    # ── Panel 1: horizontal bar chart ─────────────────────────────────────
     ax = axes[0]
     y  = np.arange(len(s_labels))
     ax.barh(y, s_delays, color=s_colors, edgecolor="none", height=0.85)
@@ -158,12 +144,10 @@ def fig1_delay_profile(d):
     ax.invert_yaxis()
     ax.set_title("Per-region blood arrival delay", fontsize=10, pad=6)
 
-    # Legend
     handles = [mpatches.Patch(color=NET_COLORS[n], label=n) for n in NET_ORDER]
     ax.legend(handles=handles, fontsize=6, loc="lower right",
               framealpha=0.8, title="Network", title_fontsize=6)
 
-    # ── Panel 2: box plot by network ───────────────────────────────────────
     ax = axes[1]
     rng = np.random.default_rng(0)
     for xi, net in enumerate(NET_ORDER):
@@ -183,7 +167,6 @@ def fig1_delay_profile(d):
     ax.set_ylabel("Blood arrival delay (s)", fontsize=9)
     ax.set_title("Delay by network", fontsize=10, pad=6)
 
-    # ── Panel 3: per-region FC bias grouped by network ─────────────────────
     ax = axes[2]
     net_means, net_sems, net_cols = [], [], []
     for net in NET_ORDER:
@@ -212,9 +195,6 @@ def fig1_delay_profile(d):
     print(f"Saved fig1_delay_profile.png ({png_kb} KB) + .svg")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Figure 2 — FC bias story
-# ══════════════════════════════════════════════════════════════════════════════
 def fig2_fc_bias_story(d):
     fig, axes = plt.subplots(1, 3, figsize=(15, 4))
     for ax in axes:
@@ -242,7 +222,6 @@ def fig2_fc_bias_story(d):
                   d["p3_rho"], d["p3_p"], "#55A868",
                   "HRF simulation\n(sub-ms resolution)")
 
-    # Panel 3 — summary bar
     ax = axes[2]
     conditions = ["Empirical", "HRF model", "BW model"]
     values     = [d["p2_mad"], d["p3_mad"], d["p3_bw_mad"]]
@@ -271,9 +250,6 @@ def fig2_fc_bias_story(d):
     print(f"Saved fig2_fc_bias_story.png ({png_kb} KB) + .svg")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Figure 3 — Network-level FC bias matrix
-# ══════════════════════════════════════════════════════════════════════════════
 def fig3_network_bias_matrix(d):
     networks  = d["networks"]
     fc_lh     = d["fc_lh"]
@@ -302,7 +278,6 @@ def fig3_network_bias_matrix(d):
                 sub2 = np.abs(delta_hrf[np.ix_(idx_i, idx_j)])
                 net_fc_dfc[ni, nj] = sub2.mean()
 
-    # Identify highest-bias network pair
     dfc_copy = net_fc_dfc.copy()
     np.fill_diagonal(dfc_copy, 0)  # exclude diagonal for clarity
     best_flat = np.unravel_index(np.argmax(dfc_copy), dfc_copy.shape)
@@ -314,7 +289,6 @@ def fig3_network_bias_matrix(d):
     fig, axes = plt.subplots(1, 2, figsize=(10, 8))
     tick_lbl  = NET_ORDER
 
-    # Panel 1: Legacy FC
     ax = axes[0]
     im1 = ax.imshow(net_fc_leg, cmap="RdBu_r", vmin=-0.3, vmax=0.3, aspect="auto")
     ax.set_xticks(range(n_nets)); ax.set_xticklabels(tick_lbl, rotation=45, ha="right", fontsize=9)
@@ -324,13 +298,11 @@ def fig3_network_bias_matrix(d):
     cbar1.set_label("Mean FC", fontsize=9)
     cbar1.ax.tick_params(labelsize=8)
 
-    # Panel 2: |ΔFC|
     ax = axes[1]
     im2 = ax.imshow(net_fc_dfc, cmap="Reds", vmin=0, aspect="auto")
     ax.set_xticks(range(n_nets)); ax.set_xticklabels(tick_lbl, rotation=45, ha="right", fontsize=9)
     ax.set_yticks(range(n_nets)); ax.set_yticklabels(tick_lbl, fontsize=9)
     ax.set_title("Network FC bias |ΔFC| from vascular delays", fontsize=10, pad=8)
-    # Annotate highest-bias cell with asterisk
     ax.text(best_j, best_i, "*", ha="center", va="center",
             fontsize=14, color="white", fontweight="bold")
     cbar2 = fig.colorbar(im2, ax=ax, shrink=0.7, pad=0.03)
@@ -349,9 +321,6 @@ def fig3_network_bias_matrix(d):
     return best_pair, best_val
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Figure 4 — Summary card
-# ══════════════════════════════════════════════════════════════════════════════
 def fig4_summary_card(d):
     delays    = d["delays"]
     delay_range = delays.max() - delays.min()
@@ -386,13 +355,11 @@ def fig4_summary_card(d):
                     fontsize=8.5, color=SUBTEXT_COL, ha="center", va="top",
                     multialignment="center")
 
-    # Divider lines between cards
     for x in [0.265, 0.5, 0.735]:
         fig.add_artist(plt.Line2D([x, x], [0.18, 0.92],
                                   transform=fig.transFigure,
                                   color="#dddddd", linewidth=1))
 
-    # Bottom caption
     fig.text(0.5, 0.06,
              "Blood arrival time correction changes FC — the effect is spatially structured\n"
              "and 6× larger in continuous hemodynamic models than TR-discretised estimates.",
@@ -407,9 +374,6 @@ def fig4_summary_card(d):
     print(f"Saved fig4_summary_card.png ({png_kb} KB) + .svg")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Report
-# ══════════════════════════════════════════════════════════════════════════════
 def write_report(d, best_pair, best_val):
     from collections import Counter
     net_counts = Counter(d["networks"])
@@ -513,9 +477,6 @@ All 4 figures saved as both PNG and SVG: ✅
     print(f"\nReport written: {REPORT_PATH} ({REPORT_PATH.stat().st_size} bytes)")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# main
-# ══════════════════════════════════════════════════════════════════════════════
 def main():
     import time
     t0 = time.time()

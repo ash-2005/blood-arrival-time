@@ -24,7 +24,6 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from nilearn import datasets, image
 
-# ── paths ──────────────────────────────────────────────────────────────────────
 OUT_DIR       = Path("data") / "rapidtide_output"
 DATA_DIR      = Path("data")
 FIGURES_DIR   = Path("figures")
@@ -61,8 +60,7 @@ def fetch_atlas():
     atlas_img = nib.load(atlas["maps"])
     all_labels = [lbl.decode() if isinstance(lbl, bytes) else lbl
                   for lbl in atlas["labels"]]
-    # nilearn returns 101 labels: index-0 = 'Background', indices 1-100 = brain regions
-    labels = all_labels[1:]   # keep only the 100 brain region labels
+    labels = all_labels[1:]
     print(f"  Atlas shape: {atlas_img.shape}, brain parcels: {len(labels)}")
     return atlas_img, labels
 
@@ -81,7 +79,7 @@ def resample_lag_to_atlas(lag_img, atlas_img):
 def parcellate(lag_resampled, atlas_img, labels):
     print("Parcellating ...")
     lag_data    = lag_resampled.get_fdata(dtype=np.float32)
-    atlas_data  = np.asarray(atlas_img.dataobj, dtype=np.int32)  # int parcel IDs
+    atlas_data  = np.asarray(atlas_img.dataobj, dtype=np.int32)
 
     n_regions = len(labels)
     delays = np.full(n_regions, np.nan)
@@ -94,9 +92,8 @@ def parcellate(lag_resampled, atlas_img, labels):
         if len(valid) > 0:
             delays[i] = float(np.mean(valid))
         else:
-            delays[i] = np.nan  # will be imputed below
+            delays[i] = np.nan
 
-    # ── NaN imputation ──────────────────────────────────────────────────────
     n_nan = int(np.isnan(delays).sum())
     if n_nan > 0:
         median_delay = float(np.nanmedian(delays))
@@ -111,7 +108,6 @@ def parcellate(lag_resampled, atlas_img, labels):
 
 
 def print_stats(delays, labels):
-    print("\n── Delay statistics ──────────────────────────────────────────")
     print(f"  Min:    {delays.min():.4f} s  ({labels[np.argmin(delays)]})")
     print(f"  Max:    {delays.max():.4f} s  ({labels[np.argmax(delays)]})")
     print(f"  Mean:   {delays.mean():.4f} s")
@@ -140,7 +136,6 @@ def make_figure(delays, labels):
     sorted_delays = delays[sort_idx]
     sorted_labels = [labels[i] for i in sort_idx]
 
-    # colour map: green (low) → red (high)
     norm = mcolors.Normalize(vmin=sorted_delays.min(), vmax=sorted_delays.max())
     cmap = plt.cm.RdYlGn_r
     colors = cmap(norm(sorted_delays))
@@ -157,7 +152,6 @@ def make_figure(delays, labels):
         for spine in ax.spines.values():
             spine.set_edgecolor("#30363d")
 
-    # ── Left: horizontal bar chart ──────────────────────────────────────────
     y_pos = np.arange(len(sorted_labels))
     bars = ax_bar.barh(y_pos, sorted_delays, color=colors, edgecolor="none", height=0.8)
     ax_bar.axvline(0, color="#8b949e", linewidth=0.8, linestyle="--")
@@ -168,7 +162,6 @@ def make_figure(delays, labels):
                      color="#e6edf3", fontsize=13, pad=10)
     ax_bar.invert_yaxis()
 
-    # colour bar
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])
     cbar = fig.colorbar(sm, ax=ax_bar, shrink=0.4, pad=0.01)
@@ -176,7 +169,6 @@ def make_figure(delays, labels):
     cbar.ax.yaxis.set_tick_params(color="#c9d1d9")
     plt.setp(cbar.ax.yaxis.get_ticklabels(), color="#c9d1d9")
 
-    # ── Right: histogram ────────────────────────────────────────────────────
     mean_d   = delays.mean()
     median_d = np.median(delays)
     ax_hist.hist(delays, bins=20, color="#388bfd", edgecolor="#161b22", alpha=0.85)
@@ -305,7 +297,6 @@ def main():
     labels_arr    = np.array(labels)
     delays, n_nan, median_imputed = parcellate(lag_resampled, atlas_img, labels)
 
-    # save
     np.save(DELAYS_PATH, delays)
     np.save(LABELS_PATH, labels_arr)
     print(f"\nSaved: {DELAYS_PATH}  shape={delays.shape}")

@@ -20,7 +20,6 @@ BASE_S3 = "https://s3.amazonaws.com/openneuro.org/ds000228/derivatives/fmriprep/
 
 # Actual files confirmed to exist via S3 bucket listing
 FILES = [
-    # (S3 key suffix, local filename)
     (
         "sub-pixar001_task-pixar_run-001_swrf_bold.nii.gz",
         "sub-pixar001_task-pixar_run-001_swrf_bold.nii.gz",
@@ -60,7 +59,6 @@ def download_file(url: str, dest: Path) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     expected_size = get_remote_size(url)
 
-    # Already complete?
     if dest.exists() and expected_size and dest.stat().st_size == expected_size:
         print(f"  [SKIP] {dest.name} ({dest.stat().st_size / 1_048_576:.1f} MB already downloaded)")
         return
@@ -95,10 +93,10 @@ def download_file(url: str, dest: Path) -> None:
                         pct = (downloaded / expected_size * 100) if expected_size else 0
                         print(f"\r    {downloaded / 1_048_576:.1f} MB  ({pct:.0f}%)", end="", flush=True)
 
-            print()  # newline
+            print()
             final_size = dest.stat().st_size
             print(f"  [OK]   {dest.name} — {final_size / 1_048_576:.1f} MB")
-            return  # success
+            return
 
         except (requests.exceptions.ConnectionError,
                 requests.exceptions.ChunkedEncodingError,
