@@ -1,10 +1,10 @@
 # Blood Arrival Time × The Virtual Brain
 
-**Does ignoring vascular delays distort functional connectivity in TVB — and by how much?**
+**Does ignoring vascular delays distort functional connectivity in TVB, and by how much?**
 
 This repository answers that question on real fMRI data, before anyone asked it inside a computational model.
 
-The project description for [INCF GSoC 2026 #28](https://neurostars.org/t/gsoc-2026-project-28-title-integrating-blood-arrival-time-in-models-of-fmri-data-in-the-virtual-brain-in-ebrains/35605) notes that blood arrival time delays are "completely overlooked in computational models of large scale BOLD activity." This prototype builds the pipeline that changes that — running `rapidtide` on real resting-state fMRI, parcellating the delay map into 100 brain regions, injecting those delays into a Balloon-Windkessel hemodynamic model, and comparing the resulting FC matrices against the legacy (no-delay) approach. The short answer: the bias is real, spatially structured, and 6× larger in continuous hemodynamic models than TR-discretised empirical estimates suggest.
+The project description for [INCF GSoC 2026 #28](https://neurostars.org/t/gsoc-2026-project-28-title-integrating-blood-arrival-time-in-models-of-fmri-data-in-the-virtual-brain-in-ebrains/35605) notes that blood arrival time delays are "completely overlooked in computational models of large scale BOLD activity." This prototype builds the pipeline that changes that - running `rapidtide` on real resting-state fMRI, parcellating the delay map into 100 brain regions, injecting those delays into a Balloon-Windkessel hemodynamic model, and comparing the resulting FC matrices against the legacy (no-delay) approach. The short answer: the bias is real, spatially structured, and 6× larger in continuous hemodynamic models than TR-discretised empirical estimates suggest.
 
 ---
 
@@ -23,7 +23,7 @@ The project description for [INCF GSoC 2026 #28](https://neurostars.org/t/gsoc-2
 | Most distorted network pair | **Limbic × Cont**, mean \|ΔFC\| = 0.023 |
 | Parcels with valid rapidtide estimates | 100 / 100 |
 
-The empirical ρ is slightly negative (−0.062) while the simulation ρ is strongly positive (0.396). This isn't a contradiction — it's a TR discretisation artefact. At TR=2s, all 100 delays collapse to just two integer shifts (0 or −1 sample). Pairs where both regions shift by −1 have zero net displacement and no FC change, while pairs where only one region shifts tend to be the ones closest to the −1s boundary, which happen to have *smaller* absolute delay differences — inverting the sign. At 1ms simulation resolution this artefact disappears and the true positive relationship emerges cleanly.
+The empirical ρ is slightly negative (−0.062) while the simulation ρ is strongly positive (0.396). This isn't a contradiction, it's a TR discretisation artefact. At TR=2s, all 100 delays collapse to just two integer shifts (0 or −1 sample). Pairs where both regions shift by −1 have zero net displacement and no FC change, while pairs where only one region shifts tend to be the ones closest to the −1s boundary, which happen to have *smaller* absolute delay differences, inverting the sign. At 1ms simulation resolution this artefact disappears and the true positive relationship emerges cleanly.
 
 ---
 
@@ -54,7 +54,7 @@ OpenNeuro ds000228 (real fMRI, SPM-preprocessed)
 
 ### Blood arrival delays across 100 brain regions
 
-`rapidtide` estimated blood arrival time at each voxel. After parcellating into Schaefer 100 regions, the delays span 2.2 seconds — enough to meaningfully shift BOLD signals relative to each other before FC is even computed. The **Cont** network shows the widest within-network spread, and it's also the network most affected by the bias.
+`rapidtide` estimated blood arrival time at each voxel. After parcellating into Schaefer 100 regions, the delays span 2.2 seconds, enough to meaningfully shift BOLD signals relative to each other before FC is even computed. The **Cont** network shows the widest within-network spread, and it's also the network most affected by the bias.
 
 ![Fig 1](figures/fig1_delay_profile.png)
 
@@ -62,7 +62,7 @@ OpenNeuro ds000228 (real fMRI, SPM-preprocessed)
 
 ### Empirical evidence and computational confirmation
 
-Two scatter plots tell the main story side by side. On the left: the empirical analysis, where TR=2s discretisation blunts the signal. On the right: the HRF simulation at 1ms resolution, where the relationship between inter-regional delay difference and FC distortion is unambiguous (ρ=0.396, p<10⁻¹⁸⁵). The bar chart puts both in context — continuous hemodynamic modelling reveals an effect 6× larger than the empirical estimate.
+Two scatter plots tell the main story side by side. On the left: the empirical analysis, where TR=2s discretisation blunts the signal. On the right: the HRF simulation at 1ms resolution, where the relationship between inter-regional delay difference and FC distortion is unambiguous (ρ=0.396, p<10⁻¹⁸⁵). The bar chart puts both in context, continuous hemodynamic modelling reveals an effect 6× larger than the empirical estimate.
 
 ![Fig 2](figures/fig2_fc_bias_story.png)
 
@@ -70,7 +70,7 @@ Two scatter plots tell the main story side by side. On the left: the empirical a
 
 ### FC matrices: legacy vs corrected
 
-The ΔFC matrix (right panel) shows that the bias is not uniformly distributed. One region — `RH_Cont_PFCl_4` — sits exactly at the TR shift boundary, meaning it gets corrected while most of its network partners don't. Its entire row and column lights up in the ΔFC matrix, which is visible as the cross-shaped pattern. This is what "spatially structured bias" means in practice.
+The ΔFC matrix (right panel) shows that the bias is not uniformly distributed. One region — `RH_Cont_PFCl_4` - sits exactly at the TR shift boundary, meaning it gets corrected while most of its network partners don't. Its entire row and column lights up in the ΔFC matrix, which is visible as the cross-shaped pattern. This is what "spatially structured bias" means in practice.
 
 ![Fig 2 matrices](figures/phase2_fc_matrices.png)
 
@@ -78,7 +78,7 @@ The ΔFC matrix (right panel) shows that the bias is not uniformly distributed. 
 
 ### Which network pairs are most distorted?
 
-The 7×7 network bias matrix on the right shows that Cont and Default networks drive most of the distortion — consistent with their known vascular heterogeneity and their spanning of both early and late blood arrival regions. The asterisk marks Limbic × Cont as the single most distorted pair.
+The 7×7 network bias matrix on the right shows that Cont and Default networks drive most of the distortion, consistent with their known vascular heterogeneity and their spanning of both early and late blood arrival regions. The asterisk marks Limbic × Cont as the single most distorted pair.
 
 ![Fig 3](figures/fig3_network_bias_matrix.png)
 
